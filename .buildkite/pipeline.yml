@@ -1,0 +1,92 @@
+# required env:
+#   - KOPS_STATE_STORE=s3://songGithub-ex-central-dev-delopment-kops
+#   - fqClusterName=(dev-green.platform.songGithubdev.com)
+#   - AWS_DEFAULT_REGION=ap-southeast-2
+---
+steps:
+
+- block: "Which static dev cluster to create?"
+  fields:
+    - select: "pick one of the 2 dev clusters please"
+      key: "fqClusterName"
+      required: true
+      options:
+        - label: "dev-red"
+          value: "dev-red.platform.songGithubdev.com"
+        - label: "dev-green"
+          value: "dev-green.platform.songGithubdev.com"
+
+- wait
+
+- label: ':airplane_departure: preflight check'
+  command: 'bin/preflight_check.sh'
+  agents:
+    queue: some-queue
+
+- wait
+
+- label: ':k8s: making a cluster...'
+  command: 'bin/clone_code.sh songGithub-clusters && bin/mk_cluster.sh'
+  agents:
+    queue: some-queue
+  retry:
+    automatic:
+      - exit_status: "*"
+        limit: 3
+
+- wait
+
+- label: ':building_construction: install cluster system components...'
+  command: 'bin/clone_code.sh songGithub-system && bin/mk_system.sh'
+  # component:kubernetes-backup seems always fail on the 1st deploy, but will become sucessful on the next one.
+  retry:
+    automatic:
+      - exit_status: "*"
+        limit: 3
+  agents:
+    queue: some-queue
+
+- wait
+
+- label: ':tv: install monitoring components...'
+  command: 'bin/clone_code.sh songGithub-monitoring && bin/mk_monitoring.sh'
+  agents:
+    queue: some-queue
+  # some monitoring component take long time to boot up and get ready. so we tolerate that.
+  retry:
+    automatic:
+      - exit_status: "*"
+        limit: 3
+
+- wait
+
+- label: ':house_buildings: install namespace: Platform-Enablement...'
+  command: 'bin/clone_code.sh songGithub-namespace && bin/mk_pe_namespace.sh'
+  agents:
+    queue: some-queue
+  retry:
+    automatic:
+      - exit_status: "*"
+        limit: 3
+
+- block: ":bomb: destroy the static cluster?"
+
+
+- label: ':gun: uninstall monitoring related CFN resources...'
+  command: 'bin/clone_code.sh songGithub-monitoring && bin/rm_monitoring.sh'
+  agents:
+    queue: some-queue
+
+- wait
+
+- label: ':cloudformation: remove CFN stack installed by songGithub-system ...'
+  command: 'bin/clone_code.sh songGithub-system && bin/rm_system.sh'
+  agents:
+    queue: some-queue
+
+- wait
+
+- label: ':put_litter_in_its_place: tear down the cluster...'
+  command: 'bin/clone_code.sh songGithub-clusters && bin/rm_cluster.sh'
+  agents:
+    queue: some-queue

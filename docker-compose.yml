@@ -1,0 +1,26 @@
+---
+version: '2.0'
+services:
+  base:
+    build: .
+    volumes:
+      - "$HOME/.aws:/root/.aws"
+      - "$HOME/.kube:/root/.kube"
+      - ".:/app"
+      - "$HOME/.ssh:/root/.ssh"
+    working_dir: /app
+
+  kops:
+    environment:
+      - KOPS_STATE_STORE=${KOPS_STATE_STORE}
+    extends:
+      service: base
+    entrypoint: kops
+
+  kubectl:
+    image: lachlanevenson/k8s-kubectl:v1.8.10
+    working_dir: /app
+    volumes:
+      - ".:/app"
+      - "$HOME/.kube:/root/.kube"
+      - "$HOME/.minikube:$HOME/.minikube"
